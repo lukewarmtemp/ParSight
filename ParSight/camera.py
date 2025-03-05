@@ -42,8 +42,9 @@ class CameraNode(Node):
         super().__init__('camera_node')
         self.publisher_ = self.create_publisher(Image, 'camera/image_raw', 10)
         self.bridge = CvBridge()
-        self.timer = self.create_timer(0.02, self.publish_frame)  # 50 Hz (We can go up to 120 Fps)
-        self.cap = cv2.VideoCapture(gstreamer_pipeline(), cv2.CAP_GSTREAMER)
+        self.timer = self.create_timer(0.1, self.publish_frame)  # 10 Hz (We can go up to 120 Fps)
+        # self.cap = cv2.VideoCapture(gstreamer_pipeline(), cv2.CAP_GSTREAMER)
+        self.cap = cv2.VideoCapture(0)
         if not self.cap.isOpened():
             self.get_logger().error("Failed to open camera!")
             raise RuntimeError("Failed to open camera!")
@@ -66,7 +67,7 @@ def gstreamer_pipeline(
     capture_height=720,
     display_width=640,
     display_height=360,
-    framerate=60,
+    framerate=30,
     flip_method=0,
 ):
     return (

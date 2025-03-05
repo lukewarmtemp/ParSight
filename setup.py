@@ -20,7 +20,9 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'vicon = ParSight.perception:main'
+            'vicon = ParSight.perception:main',
+            'camera = ParSight.camera:main',
+            'segment = ParSight.segment:main'
         ],
     },
 )
