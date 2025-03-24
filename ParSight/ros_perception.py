@@ -1,9 +1,9 @@
 import rclpy
 from sensor_msgs.msg import Image
+import cv2
 from cv_bridge import CvBridge
 from rclpy.node import Node
 import numpy as np
-import cv2
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy
 
 
@@ -18,6 +18,7 @@ class RealSense(Node):
         self.get_logger().info('Subscribing to RealSense!')
 
     def realsense_callback(self, msg):
+        print("recieved image")
         self.get_logger().info(f"Recieved Image: {msg.height}x{msg.width}, encoding={msg.encoding}")
         
         img_data = np.frombuffer(msg.data,dtype=np.uint8)

@@ -23,12 +23,12 @@ bridge = CvBridge()
 ################################################
 # PARSIGHT CLASS WITH CTRL+C HANDLING
 ################################################
-class Segment:
+class Segment(Node):
     def __init__(self):
         super().__init__('segmentation_node') 
         
         # ROS Subscriber and Publisher nodes
-        self.camera_subscriber = self.create_subscription(Image, '/camera/image_raw', self.frame_input)
+        self.camera_subscriber = self.create_subscription(Image, '/camera/image_raw', self.frame_input, 1)
         self.get_logger().info('Subscribed to Camera Input!')
 
         # Camera Parameters
@@ -184,7 +184,7 @@ class Segment:
 ################################################
 
 
-def main():
+def main(args = None ):
     rclpy.init(args=args)
     segmentation_node = Segment()   
     try:
@@ -195,9 +195,10 @@ def main():
         node.get_logger().info('Shutting down segmentation node.')
         node.stop()
     finally:
-        node.destroy_node()
+        segmentation_node.destroy_node()
         rclpy.shutdown()
 
 if __name__ == "__main__":
     main()
+    
     
