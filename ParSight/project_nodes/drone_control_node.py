@@ -72,6 +72,7 @@ class DroneControlNode(Node):
         # generally how high above the ball we fly
         self.desired_flight_height = 0.5
         self.max_searching_height = 1.5
+        self.bounds = {"x_min": -3, "x_max": 3, "y_min": -3, "y_max": 3, "z_min": 0, "z_max": 1.5}
 
         # for vision_pose to know where it is
         self.position = Point()
@@ -92,6 +93,8 @@ class DroneControlNode(Node):
         self.bbox_data = None
         self.confidence_data = None
         self.valid_bbox = False
+        self.yes_bbox_got = False
+        self.cut_looping = False
         self.curr_bbox = None
 
         # camera parameters
@@ -109,8 +112,8 @@ class DroneControlNode(Node):
         # SUBSCRIBER/PUBLISHER SETUP
 
         # subscriber to RealSense pose data
-        self.realsense_subscriber = self.create_subscription(Odometry, '/camera/pose/sample', self.realsense_callback, qos_profile)
-        self.get_logger().info('Subscribing to RealSense!')
+        self.vicon_subscriber = self.create_subscription(PoseStamped, '/vicon/ROB498_Drone/ROB498_Drone', self.vicon_callback, 1)
+        self.get_logger().info('Subscribing to Vicon!')
 
         # publisher for VisionPose topic
         self.vision_pose_publisher = self.create_publisher(PoseStamped, '/mavros/vision_pose/pose', 1)
@@ -181,25 +184,19 @@ class DroneControlNode(Node):
     # CALLBACKS
     ################################################
 
-    def realsense_callback(self, msg):
+    def vicon_callback(self, msg):
         # get the info
-        self.position = msg.pose.pose.position
-        self.orientation = msg.pose.pose.orientation
+        self.position = msg.pose.position
+        self.orientation = msg.pose.orientation
         self.timestamp = self.get_clock().now().to_msg()
         # frame conversion
         self.orientation.x *= -1
         self.orientation.y *= -1
         self.orientation.z *= -1
         self.orientation.w *= -1
-        # print statements to know its running
-        # print(f"Position: x={self.position.x}, y={self.position.y}, z={self.position.z}")
-        # print(f"Orientation: x={self.orientation.x}, y={self.orientation.y}, z={self.orientation.z}, w={self.orientation.w}")
-        # print(f"Timestamp: {self.timestamp.sec}.{self.timestamp.nanosec}")
-        # print(f"Frame ID: {self.frame_id}")
         # WRITE BOTH IMMEDIATELY
         self.send_vision_pose()
         self.send_setpoint()
-        self.test_loop()
 
     def send_vision_pose(self):
         # Create a new PoseStamped message to publish to vision_pose topic
@@ -211,13 +208,25 @@ class DroneControlNode(Node):
         # Publish the message to the /mavros/vision_pose/pose topic
         self.vision_pose_publisher.publish(vision_pose_msg)
 
+    def clamp_position(self, position):
+        # Apply safety bounds to the setpoints so the drone never tries to go outside
+        position.x = max(self.bounds["x_min"], min(position.x, self.bounds["x_max"]))
+        position.y = max(self.bounds["y_min"], min(position.y, self.bounds["y_max"]))
+        position.z = max(self.bounds["z_min"], min(position.z, self.bounds["z_max"]))
+        return position
+
     def send_setpoint(self):
         # Create a new PoseStamped message to publish to setpoint topic
+        current_position = self.clamp_position(self.set_position)
         setpoint_msg = PoseStamped()
         setpoint_msg.header.stamp = self.timestamp
         setpoint_msg.header.frame_id = self.frame_id
-        setpoint_msg.pose.position = self.set_position
+        setpoint_msg.pose.position = current_position
         setpoint_msg.pose.orientation = self.set_orientation
+        print(f"Position: x={self.set_position.x}, y={self.set_position.y}, z={self.set_position.z}")
+        # print(f"Orientation: x={self.orientation.x}, y={self.orientation.y}, z={self.orientation.z}, w={self.orientation.w}")
+        # print(f"Timestamp: {self.timestamp.sec}.{self.timestamp.nanosec}")
+        # print(f"Frame ID: {self.frame_id}")
         # Publish the message to the /mavros/setpoint_position/local topic
         self.setpoint_publisher.publish(setpoint_msg)
 
@@ -227,7 +236,7 @@ class DroneControlNode(Node):
         self.bbox_data = msg.bbox
         self.confidence_data = msg.confidence
         # check if the bounding box is valid
-        if self.bbox_data != [-1, -1, -1, -1]: self.valid_bbox = True
+        if self.bbox_data != [-1, -1, -1, -1]: self.valid_bbox = True; self.yes_bbox_got = True
         else: self.valid_bbox = False
         # these are just print statements
         self.get_logger().info(f"Received image with bbox: {self.bbox_data} and confidence: {self.confidence_data}")
@@ -246,9 +255,18 @@ class DroneControlNode(Node):
         # safety check in case the new bbox is bad, use last
         if self.valid_bbox: self.curr_bbox = self.bbox_data
         # then everytime we get the distances
-        distance_m, offset_x_m, offset_y_m = self.calculate_golf_ball_metrics()
-        # then based on how far off we are, instruct the drone's setpoint to move that much
-        self.move_drone(distance_m, offset_x_m, offset_y_m)
+        if self.yes_bbox_got:
+            distance_m, offset_x_m, offset_y_m, offset_x_pixels, offset_y_pixels = self.calculate_golf_ball_metrics()
+            # extract attributes saved
+            frame, bbox, conf = self.image_data, self.bbox_data, self.confidence_data
+            # draw bounding box and distance in segmentation for viewing
+            cv2.rectangle(frame, (bbox[0], bbox[1]), (bbox[2], bbox[3]), (0, 255, 0), 2)
+            label = f"Conf: {conf:.2f} | Dist: {offset_x_pixels:.1f} {offset_y_pixels:.1f}m"
+            cv2.putText(frame, label, (bbox[0], bbox[1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
+            cv2.imshow("Golf Ball Detection", frame)
+            if cv2.waitKey(1) & 0xFF == ord('q'): self.cut_looping = True
+            # then based on how far off we are, instruct the drone's setpoint to move that much
+            self.move_drone(distance_m, offset_x_m, offset_y_m)
 
     def calculate_golf_ball_metrics(self):
         # unpack all the values from the bounding box and calculate the diameter
@@ -267,14 +285,19 @@ class DroneControlNode(Node):
         offset_x_pixels, offset_y_pixels = ball_center_x - image_center_x, ball_center_y - image_center_y
         offset_x_m = self.pixels_to_meters(offset_x_pixels, distance_m)
         offset_y_m = self.pixels_to_meters(offset_y_pixels, distance_m)
-        return distance_m, offset_x_m, offset_y_m
+        return distance_m, offset_x_m, offset_y_m, offset_x_pixels, offset_y_pixels
 
-    def move_drone(self, offset_x_m, offset_y_m, distance_m):
-        # change the drone position based on the offset
-        self.set_position.x = self.position.x + offset_x_m
-        self.set_position.y = self.position.y + offset_y_m
+    def move_drone(self, offset_x_m, offset_y_m, step_size=0.01):
+        vector_length = (offset_x_m ** 2 + offset_y_m ** 2) ** 0.5
+        if vector_length == 0: return
+        scaled_x = (offset_x_m / vector_length) * step_size
+        scaled_y = (offset_y_m / vector_length) * step_size
+        # update the drone's position with the scaled values
+        self.set_position.x = self.position.x + scaled_x
+        self.set_position.y = self.position.y + scaled_y
         self.set_position.z = self.desired_flight_height
         return
+
 
     ################################################
     # IMAGE PROCESSING HELPERS
