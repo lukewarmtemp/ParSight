@@ -72,20 +72,20 @@ class FrameReader(threading.Thread):
 # ros2 camera node
 class RGBCameraNode(Node):
 
-    def __init__(self):
+    def __init__(self, cap):
         super().__init__('rgb_camera_node')
         # initiate the node
         self.publisher_ = self.create_publisher(Image, 'camera/image_raw', 1)
         self.bridge = CvBridge()
-        self.timer = self.create_timer(0.1, self.publish_frame)  # 10 Hz (We can go up to 120 Fps)
-        self.cap = cv2.VideoCapture(0)
+        #self.timer = self.create_timer(0.1, self.publish_frame)  # 10 Hz (We can go up to 120 Fps)
+        self.cap = cap
         # self.cap = cv2.VideoCapture(gstreamer_pipeline(), cv2.CAP_GSTREAMER)
         # check for camera starting
         if not self.cap.isOpened():
             self.get_logger().error("Failed to open camera!")
             raise RuntimeError("Failed to open camera!")
         self.frame_reader = FrameReader(self.cap, "FrameReader")
-        self.frame_reader.start()
+        self.frame_reader.start()cv2.VideoCapture(0)
 
     def publish_frame(self):
         # publishes frames as ros2 messages
@@ -99,37 +99,39 @@ class RGBCameraNode(Node):
         self.frame_reader.stop()
         self.cap.release()
 
-
-# gstreamer pipeline for nvidia jetson cameras
-def gstreamer_pipeline(capture_width=1280, capture_height=720,
-                       display_width=640, display_height=360,
-                       framerate=30, flip_method=0):
-    return (
-        "nvarguscamerasrc ! "
-        "video/x-raw(memory:NVMM), "
-        "width=(int)%d, height=(int)%d, "
-        "format=(string)NV12, framerate=(fraction)%d/1 ! "
-        "nvvidconv flip-method=%d ! "
-        "video/x-raw, width=(int)%d, height=(int)%d, format=(string)BGRx ! "
-        "videoconvert ! "
-        "video/x-raw, format=(string)BGR ! appsink"
-        % (
-            capture_width,
-            capture_height,
-            framerate,
-            flip_method,
-            display_width,
-            display_height,
-        )
-    )
-
-
 ################################################
 # Main
 ################################################
 
 
 def main(args=None):
+
+    cap = cv2.VideoCapture(0)  # Replace 0 with the correct device ID if necessary
+
+    if not cap.isOpened():
+        print("Failed to open camera")
+        exit()
+
+    while True:
+        # Capture frame-by-frame
+        ret, frame = cap.read()
+    
+        # if frame is read correctly ret is True
+        if not ret:
+            print("Can't receive frame (stream end?). Exiting ...")
+            break
+        # Our operations on the frame come here
+        # Display the resulting frame
+        cv2.imshow('frame', frame)
+        if cv2.waitKey(1) == ord('q'):
+            break
+    
+    # When everything done, release the capture
+    cap.release()
+    cv.destroyAllWindows()
+
+    cap = cv2.VideoCapture(0)
+
     rclpy.init(args=args)
     node = RGBCameraNode()
     try:
@@ -143,6 +145,8 @@ def main(args=None):
 
 
 if __name__ == '__main__':
+    print(cv2.getBuildInformation())
+
     main()
 
 

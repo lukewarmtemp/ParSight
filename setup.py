@@ -20,12 +20,10 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'vicon = ParSight.perception:main',
-            'camera = ParSight.camera:main',
             'segment = ParSight.segment:main',
             'rgb_camera = ParSight.rgb_camera_node:main',
             'yolo_seg = ParSight.yolo_seg_node:main',
-            'test_camm = ParSight.test_camera:main'
+            'drone_control = ParSight.drone_control_node:main'
         ],
     },
 )

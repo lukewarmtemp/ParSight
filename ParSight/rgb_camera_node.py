@@ -72,14 +72,14 @@ class FrameReader(threading.Thread):
 # ros2 camera node
 class RGBCameraNode(Node):
 
-    def __init__(self):
+    def __init__(self, cap):
         super().__init__('rgb_camera_node')
         # initiate the node
         self.publisher_ = self.create_publisher(Image, 'camera/image_raw', 1)
         self.bridge = CvBridge()
-        self.timer = self.create_timer(0.1, self.publish_frame)  # 10 Hz (We can go up to 120 Fps)
-        # self.cap = cv2.VideoCapture(0)
-        self.cap = cv2.VideoCapture(gstreamer_pipeline(), cv2.CAP_GSTREAMER)
+        #self.timer = self.create_timer(0.1, self.publish_frame)  # 10 Hz (We can go up to 120 Fps)
+        self.cap = cap
+        # self.cap = cv2.VideoCapture(gstreamer_pipeline(), cv2.CAP_GSTREAMER)
         # check for camera starting
         if not self.cap.isOpened():
             self.get_logger().error("Failed to open camera!")
@@ -99,39 +99,17 @@ class RGBCameraNode(Node):
         self.frame_reader.stop()
         self.cap.release()
 
-
-# gstreamer pipeline for nvidia jetson cameras
-def gstreamer_pipeline(capture_width=1280, capture_height=720,
-                       display_width=640, display_height=360,
-                       framerate=30, flip_method=0):
-    return (
-        "nvarguscamerasrc ! "
-        "video/x-raw(memory:NVMM), "
-        "width=(int)%d, height=(int)%d, "
-        "format=(string)NV12, framerate=(fraction)%d/1 ! "
-        "nvvidconv flip-method=%d ! "
-        "video/x-raw, width=(int)%d, height=(int)%d, format=(string)BGRx ! "
-        "videoconvert ! "
-        "video/x-raw, format=(string)BGR ! appsink"
-        % (
-            capture_width,
-            capture_height,
-            framerate,
-            flip_method,
-            display_width,
-            display_height,
-        )
-    )
-
-
 ################################################
 # Main
 ################################################
 
 
 def main(args=None):
+
+    cap = cv2.VideoCapture(0)  # Replace 0 with the correct device ID if necessary
+
     rclpy.init(args=args)
-    node = RGBCameraNode()
+    node = RGBCameraNode(cap)
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
@@ -143,6 +121,8 @@ def main(args=None):
 
 
 if __name__ == '__main__':
+    print(cv2.getBuildInformation())
+
     main()
 
 
