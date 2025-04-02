@@ -139,13 +139,13 @@ class SegDroneControlNode(Node):
             self.vicon_subscriber = self.create_subscription(PoseStamped, '/vicon/ROB498_Drone/ROB498_Drone', self.vicon_callback, 1)
             self.get_logger().info('Subscribing to Vicon!')
         
-        # publisher for VisionPose topic
-        self.vision_pose_publisher = self.create_publisher(PoseStamped, '/mavros/vision_pose/pose', 1)
-        self.get_logger().info('Publishing to VisionPose')
+        # # publisher for VisionPose topic
+        # self.vision_pose_publisher = self.create_publisher(PoseStamped, '/mavros/vision_pose/pose', 1)
+        # self.get_logger().info('Publishing to VisionPose')
 
-        # publisher for SetPoint topic
-        self.setpoint_publisher = self.create_publisher(PoseStamped, '/mavros/setpoint_position/local', qos_profile)
-        self.get_logger().info('Publishing to SetPoint')
+        # # publisher for SetPoint topic
+        # self.setpoint_publisher = self.create_publisher(PoseStamped, '/mavros/setpoint_position/local', qos_profile)
+        # self.get_logger().info('Publishing to SetPoint')
 
         # statement to end the inits
         self.get_logger().info('Nodes All Setup and Started!')
